@@ -1,6 +1,11 @@
+import { securityHeaders } from "./lib/security/headers.js";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  /* config options here */
+  poweredByHeader: false,
+  async headers() {
+    return [{ source: "/(.*)", headers: securityHeaders() }];
+  },
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {

@@ -9,7 +9,7 @@ import { startAttempt } from "@/services/assessments";
 export async function POST(request, { params }) {
   const { user, response } = await requireApiUser(request, { roles: ["student"] });
   if (response) return response;
-  const limited = limitOrNull(`assess-start:${user.id}`, { limit: 10, windowMs: 60_000 });
+  const limited = await limitOrNull(`assess-start:${user.id}`, { limit: 10, windowMs: 60_000 });
   if (limited) return limited;
   const { data, response: invalid } = await parseJson(request, startSchema);
   if (invalid) return invalid;

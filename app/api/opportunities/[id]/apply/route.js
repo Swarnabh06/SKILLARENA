@@ -12,7 +12,7 @@ import { ApplicationError, applyToOpportunity } from "@/services/applications";
 export async function POST(request, { params }) {
   const { user, response } = await requireApiUser(request, { roles: ["student"] });
   if (response) return response;
-  const limited = limitOrNull(`apply:${user.id}`, { limit: 10, windowMs: 60_000 });
+  const limited = await limitOrNull(`apply:${user.id}`, { limit: 10, windowMs: 60_000 });
   if (limited) return limited;
 
   let form;

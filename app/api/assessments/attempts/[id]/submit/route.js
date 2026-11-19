@@ -8,7 +8,7 @@ import { submitAttempt } from "@/services/assessments";
 export async function POST(request, { params }) {
   const { user, response } = await requireApiUser(request, { roles: ["student"] });
   if (response) return response;
-  const limited = limitOrNull(`assess-submit:${user.id}`, { limit: 20, windowMs: 60_000 });
+  const limited = await limitOrNull(`assess-submit:${user.id}`, { limit: 20, windowMs: 60_000 });
   if (limited) return limited;
   const { id } = await params;
   try {

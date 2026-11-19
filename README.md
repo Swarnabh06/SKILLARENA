@@ -72,6 +72,8 @@ To make another account an admin: `npm run make-admin -- someone@example.com`.
 | `npm run lint` | ESLint |
 | `npm run seed` | Upserts sample content and demo accounts into MongoDB (safe to re-run) |
 | `npm run test:seed` | Runs the seed twice against a throwaway in-memory MongoDB and checks the result |
+| `npm test` | Every offline test suite (see Phase 11) |
+| `npm run test:smoke` | End-to-end checks against a running server |
 | `npm run test:external` | Unit tests for the external API mappers (no network) |
 | `npm run make-admin -- <email>` | Grants the admin role (and marks the account's setup as done) |
 | `npm run dev:memory-db` | Starts a temporary local MongoDB, seeds it (if `DEMO_USER_PASSWORD` is set) and prints its URI; data is discarded on exit |
@@ -339,6 +341,47 @@ Third-party data is fetched on the server only, cached in MongoDB, and shown wit
   GitHub and Codeforces) without network access. The smoke test's Phase 10 checks use the live services when
   they answer and check the fallback when they don't, and say which happened.
 
+## Security, testing and deployment (Phase 11)
+
+Deploying: see **[DEPLOYMENT.md](DEPLOYMENT.md)** (Vercel + MongoDB Atlas free tiers, environment variables,
+Google OAuth, Judge0, first admin, post-deploy checklist).
+
+**Hardening**
+- **Security headers** on every response (`lib/security/headers.js`):
+  - a Content Security Policy with no framing and no plugins, scripts only from the site and the code-editor CDN
+  - HSTS in production
+  - `X-Frame-Options: DENY` and `nosniff`
+  - a strict referrer policy and a locked-down permissions policy
+  - no `X-Powered-By` header
+- **Cross-site request check** (`proxy.js`): `POST`/`PUT`/`PATCH`/`DELETE` to `/api/*` from another origin
+  get a 403 before reaching the route. Better Auth checks its own routes.
+- **Shared rate limits:** app limits live in MongoDB (`rate_limits`, fixed windows, TTL-cleaned) and Better
+  Auth's sign-in limits in its `rateLimit` collection, so they hold across serverless instances. If the
+  database can't be reached, the app falls back to per-instance memory rather than blocking everyone.
+- **Start-up configuration check** (`instrumentation.js` + `lib/env.js`): in production, missing or unsafe
+  settings stop the server with a clear message. This covers short or placeholder secrets, a non-https
+  `BETTER_AUTH_URL`, half-configured Google OAuth and a localhost Judge0. In development they're only logged.
+- **Signed-in pages always render per request:** the session helper reads the request before anything else,
+  so a page can't be prerendered as "signed out" and served to everyone. This bug was found while testing a
+  production build made without database settings, and is now fixed.
+- **Error handling:** error pages (`app/error.js`, `app/global-error.js`) show a reference code and never
+  the details. Server errors are logged as one JSON line each.
+- **Health check:** `GET /api/health` returns 200 with the mode and database ping, or 503. It never returns
+  URLs or keys.
+- **Uploads:** resumes are capped at 4 MB (Vercel's request limit is 4.5 MB); photos and logos at 2 MB.
+
+**Testing**
+
+| Command | What it runs |
+| --- | --- |
+| `npm test` | All offline suites: contest scoring, assessment scoring, external API mappers, config/headers/origin checks, and every problem's reference solution against its tests |
+| `npm run test:seed` | The seed script, twice, against an in-memory MongoDB |
+| `npm run test:smoke` | End-to-end checks against a running server (set `BASE_URL`, `DEMO_USER_PASSWORD`, `MONGODB_URI`, `MONGODB_DB`, `CRON_SECRET`; `SMOKE_OFFLINE=1` skips live third-party calls) |
+
+`.github/workflows/ci.yml` runs lint, `npm test`, a demo-mode build and `npm audit` (high severity fails)
+on every push and pull request. A second job seeds an in-memory database, builds and starts the production
+server, and runs the smoke test against it.
+
 ## Data model
 
 MongoDB collections (spec table → collection):
@@ -366,7 +409,7 @@ MongoDB collections (spec table → collection):
   session and role on the server.
 - Profile updates use strict schemas: unknown fields (like `xp` or `role`) are rejected, links must be http(s).
 - Uploads are checked by their actual bytes, not the file name or browser-reported type: resumes must be PDF, DOC
-  or DOCX up to 5 MB, photos PNG, JPG or WebP up to 2 MB.
+  or DOCX up to 4 MB (below Vercel's 4.5 MB request limit), photos PNG, JPG or WebP up to 2 MB.
 - The setup step can run only once, so it can't be replayed to switch roles later.
 - Suspended accounts can't sign in, and any session they still had is treated as signed out.
 - Admin routes check the admin role on the server and log every action.
@@ -383,5 +426,5 @@ MongoDB collections (spec table → collection):
 7. Assessment center ✔
 8. Recruiter portal ✔
 9. Admin module ✔
-10. External API integrations ← **current**
-11. Security, testing and deployment preparation
+10. External API integrations ✔
+11. Security, testing and deployment preparation ← **current**

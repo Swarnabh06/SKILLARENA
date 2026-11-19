@@ -9,7 +9,7 @@ import { getStandings } from "@/services/contests";
 export async function GET(request, { params }) {
   if (!isDatabaseConfigured()) return apiError(503, "Contests need a connected database.");
   const user = await optionalApiUser(request);
-  const limited = limitOrNull(`standings:${user?.id ?? request.headers.get("x-forwarded-for") ?? "anon"}`, { limit: 60, windowMs: 60_000 });
+  const limited = await limitOrNull(`standings:${user?.id ?? request.headers.get("x-forwarded-for") ?? "anon"}`, { limit: 60, windowMs: 60_000 });
   if (limited) return limited;
   const { slug } = await params;
   try {

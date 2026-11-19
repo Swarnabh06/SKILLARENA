@@ -10,7 +10,7 @@ export async function POST(request) {
   const { user, response } = await requireApiUser(request);
   if (response) return response;
 
-  const limited = limitOrNull(`onboarding:${user.id}`, { limit: 10, windowMs: 60_000 });
+  const limited = await limitOrNull(`onboarding:${user.id}`, { limit: 10, windowMs: 60_000 });
   if (limited) return limited;
 
   const { data, response: invalid } = await parseJson(request, onboardingSchema);
