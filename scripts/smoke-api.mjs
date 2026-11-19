@@ -138,7 +138,7 @@ await step("fake PDF (text with .pdf name) is rejected by content check", async 
 });
 
 await step("oversized resume is rejected", async () => {
-  const big = new Blob([Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(5 * 1024 * 1024 + 10, 32)])]);
+  const big = new Blob([Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(4 * 1024 * 1024 + 10, 32)])]);
   const { res } = await upload("resume", big, "big.pdf", aarav.cookie);
   assert.equal(res.status, 413);
 });
@@ -1106,138 +1106,189 @@ if (process.env.MONGODB_URI) {
     assert.ok((await call("/admin", { cookie: admin.cookie })).data.includes("Recent admin actions"));
   });
 
-  // ── Phase 10: external APIs (live network) ─────────────────────
-  // Needs the server started with CRON_SECRET (and CRON_SECRET set here too).
-  // Each live check verifies real data when the service answers, and the
-  // fallback (error recorded, nothing lost, page still renders) when it doesn't.
-  const CRON = process.env.CRON_SECRET;
-  const liveNotes = [];
-  await step("cron endpoint: secret required; due boards import or record the failure; intervals respected", async () => {
-    if (!CRON) throw new Error("set CRON_SECRET for this check (same value as the server)");
-    assert.equal((await call("/api/cron/sync-jobs")).res.status, 401);
-    const wrong = await fetch(`${BASE}/api/cron/sync-jobs`, { headers: { Authorization: "Bearer nope" } });
-    assert.equal(wrong.status, 401);
-    const before = await db.collection("opportunities").countDocuments({ source: { $in: ["remotive", "arbeitnow"] }, status: "published" });
-    const run = await fetch(`${BASE}/api/cron/sync-jobs`, { headers: { Authorization: `Bearer ${CRON}` } }).then((r) => r.json());
-    for (const key of ["remotive", "arbeitnow"]) {
-      const r = run[key];
-      if (r?.ok) {
-        assert.ok(r.stats.fetched > 0, `${key} returned no jobs`);
-        liveNotes.push(`${key}: imported (${r.stats.fetched} fetched, ${r.stats.kept} kept)`);
-      } else if (r?.skipped) {
-        liveNotes.push(`${key}: skipped (${r.skipped}, synced recently)`);
-      } else {
-        const row = await db.collection("integrations").findOne({ key });
-        assert.ok(row?.lastError, `${key} failed without recording why`);
-        liveNotes.push(`${key}: unreachable → fallback checked (${row.lastError})`);
+  // SMOKE_OFFLINE=1 (CI) skips the live third-party calls: Remotive asks for only a few requests a day.
+  if (process.env.SMOKE_OFFLINE === "1") {
+    console.log("  (Phase 10 live external checks skipped: SMOKE_OFFLINE=1)");
+  } else {
+    // ── Phase 10: external APIs (live network) ─────────────────────
+    // Needs the server started with CRON_SECRET (and CRON_SECRET set here too).
+    // Each live check verifies real data when the service answers, and the
+    // fallback (error recorded, nothing lost, page still renders) when it doesn't.
+    const CRON = process.env.CRON_SECRET;
+    const liveNotes = [];
+    await step("cron endpoint: secret required; due boards import or record the failure; intervals respected", async () => {
+      if (!CRON) throw new Error("set CRON_SECRET for this check (same value as the server)");
+      assert.equal((await call("/api/cron/sync-jobs")).res.status, 401);
+      const wrong = await fetch(`${BASE}/api/cron/sync-jobs`, { headers: { Authorization: "Bearer nope" } });
+      assert.equal(wrong.status, 401);
+      const before = await db.collection("opportunities").countDocuments({ source: { $in: ["remotive", "arbeitnow"] }, status: "published" });
+      const run = await fetch(`${BASE}/api/cron/sync-jobs`, { headers: { Authorization: `Bearer ${CRON}` } }).then((r) => r.json());
+      for (const key of ["remotive", "arbeitnow"]) {
+        const r = run[key];
+        if (r?.ok) {
+          assert.ok(r.stats.fetched > 0, `${key} returned no jobs`);
+          liveNotes.push(`${key}: imported (${r.stats.fetched} fetched, ${r.stats.kept} kept)`);
+        } else if (r?.skipped) {
+          liveNotes.push(`${key}: skipped (${r.skipped}, synced recently)`);
+        } else {
+          const row = await db.collection("integrations").findOne({ key });
+          assert.ok(row?.lastError, `${key} failed without recording why`);
+          liveNotes.push(`${key}: unreachable → fallback checked (${row.lastError})`);
+        }
       }
-    }
-    const after = await db.collection("opportunities").countDocuments({ source: { $in: ["remotive", "arbeitnow"] }, status: "published" });
-    if (!run.remotive?.ok && !run.arbeitnow?.ok) assert.equal(after, before, "a failed import changed the live listings");
-    const again = await fetch(`${BASE}/api/cron/sync-jobs`, { headers: { Authorization: `Bearer ${CRON}` } }).then((r) => r.json());
-    assert.equal(again.remotive.skipped, "interval", "Remotive called twice in a row");
-  });
+      const after = await db.collection("opportunities").countDocuments({ source: { $in: ["remotive", "arbeitnow"] }, status: "published" });
+      if (!run.remotive?.ok && !run.arbeitnow?.ok) assert.equal(after, before, "a failed import changed the live listings");
+      const again = await fetch(`${BASE}/api/cron/sync-jobs`, { headers: { Authorization: `Bearer ${CRON}` } }).then((r) => r.json());
+      assert.equal(again.remotive.skipped, "interval", "Remotive called twice in a row");
+    });
 
-  // Real imports only (seeded sample listings use the same sources but have no lastSeenAt).
-  const sampleExternal = await db.collection("opportunities").findOne({ source: { $in: ["remotive", "arbeitnow"] }, status: "published", lastSeenAt: { $ne: null }, isSample: { $ne: true } }, { sort: { postedAt: -1 } });
-  await step("imported listings: plain-text, labelled with their source, apply on the source site only", async () => {
-    if (!sampleExternal) throw new Error("no imported listing yet (both job boards unreachable since the database started)");
-    assert.equal(sampleExternal.applyMethod, "external");
-    assert.match(sampleExternal.applyUrl, sampleExternal.source === "remotive" ? /^https:\/\/remotive\.com\// : /^https:\/\/www\.arbeitnow\.[a-z]+\//); // Arbeitnow also uses country domains (.de, .fr…)
-    assert.ok(!/<[a-z]|&lt;/i.test(sampleExternal.description), "HTML stored in the description");
-    const label = sampleExternal.source === "remotive" ? "Remotive" : "Arbeitnow";
-    assert.ok((await call(`/skillbridge?source=${sampleExternal.source}`)).data.includes(`via ${label}`), "source badge missing");
-    const detail = await call(`/skillbridge/${sampleExternal._id}`);
-    assert.ok(detail.data.includes(sampleExternal.applyUrl.replace(/&/g, "&amp;")) || detail.data.includes(sampleExternal.applyUrl), "link back to the source missing");
-    const apply = await call(`/api/opportunities/${sampleExternal._id}/apply`, { method: "POST", cookie: aarav.cookie, form: applyForm("profile") });
-    assert.equal(apply.res.status, 409);
-  });
+    // Real imports only (seeded sample listings use the same sources but have no lastSeenAt).
+    const sampleExternal = await db.collection("opportunities").findOne({ source: { $in: ["remotive", "arbeitnow"] }, status: "published", lastSeenAt: { $ne: null }, isSample: { $ne: true } }, { sort: { postedAt: -1 } });
+    await step("imported listings: plain-text, labelled with their source, apply on the source site only", async () => {
+      if (!sampleExternal) throw new Error("no imported listing yet (both job boards unreachable since the database started)");
+      assert.equal(sampleExternal.applyMethod, "external");
+      assert.match(sampleExternal.applyUrl, sampleExternal.source === "remotive" ? /^https:\/\/remotive\.com\// : /^https:\/\/www\.arbeitnow\.[a-z]+\//); // Arbeitnow also uses country domains (.de, .fr…)
+      assert.ok(!/<[a-z]|&lt;/i.test(sampleExternal.description), "HTML stored in the description");
+      const label = sampleExternal.source === "remotive" ? "Remotive" : "Arbeitnow";
+      assert.ok((await call(`/skillbridge?source=${sampleExternal.source}`)).data.includes(`via ${label}`), "source badge missing");
+      const detail = await call(`/skillbridge/${sampleExternal._id}`);
+      assert.ok(detail.data.includes(sampleExternal.applyUrl.replace(/&/g, "&amp;")) || detail.data.includes(sampleExternal.applyUrl), "link back to the source missing");
+      const apply = await call(`/api/opportunities/${sampleExternal._id}/apply`, { method: "POST", cookie: aarav.cookie, form: applyForm("profile") });
+      assert.equal(apply.res.status, 409);
+    });
 
-  await step("re-sync: take-downs stay down; vanished listings close only after a good fetch; returning ones reopen", async () => {
-    const source = "arbeitnow";
-    const now = new Date();
-    const base = { companyName: "Smoke GmbH", description: "x", type: "full_time", workMode: "onsite", location: "Berlin", experienceLevel: "1-3", requiredSkills: ["Python"], source, applyMethod: "external", applyUrl: "https://www.arbeitnow.com/", postedAt: now, createdAt: now, updatedAt: now };
-    const { insertedIds } = await db.collection("opportunities").insertMany([
-      { ...base, title: "Smoke taken down", externalId: `smoke-down-${stamp}`, status: "published", lastSeenAt: now },
-      { ...base, title: "Smoke vanished", externalId: `smoke-gone-${stamp}`, status: "published", lastSeenAt: new Date(now - 86_400_000) },
-    ]);
-    const [downId, ghostId] = Object.values(insertedIds);
-    assert.equal((await adminPost(`/api/admin/listings/${downId}`, { action: "take_down", note: "Smoke: not a student role." })).data.status, "rejected");
-    await db.collection("integrations").updateOne({ key: source }, { $set: { lastRunAt: new Date() } }, { upsert: true });
-    assert.equal((await call(`/api/admin/integrations/${source}/sync`, { method: "POST", cookie: admin.cookie, json: {} })).res.status, 429, "sync allowed inside the interval");
-    assert.equal((await call(`/api/admin/integrations/${source}/sync`, { method: "POST", cookie: aarav.cookie, json: {} })).res.status, 403);
-    await db.collection("integrations").updateOne({ key: source }, { $set: { lastRunAt: new Date(Date.now() - 3_600_000) } });
-    const res = await call(`/api/admin/integrations/${source}/sync`, { method: "POST", cookie: admin.cookie, json: {} });
-    assert.equal((await db.collection("opportunities").findOne({ _id: downId })).status, "rejected", "take-down undone by sync");
-    const ghost = await db.collection("opportunities").findOne({ _id: ghostId });
-    if (res.res.status === 200) {
-      assert.equal(ghost.status, "closed", "vanished listing still open after a good fetch");
-      liveNotes.push(`re-sync: Arbeitnow answered (${res.data.stats.fetched} jobs)`);
-    } else {
-      assert.equal(res.res.status, 502, JSON.stringify(res.data));
-      assert.equal(ghost.status, "published", "a failed fetch closed listings");
-      liveNotes.push(`re-sync: Arbeitnow unreachable → checked that nothing was closed (${res.data.error})`);
-    }
-    const page = await call("/admin/integrations", { cookie: admin.cookie });
-    assert.ok(page.data.includes("Remotive") && page.data.includes("Arbeitnow") && page.data.includes("Judge0"), "integrations page");
-    await db.collection("opportunities").deleteMany({ _id: { $in: [downId, ghostId] } });
-  });
-
-  await step("GitHub and Codeforces stats: fetched or fallen back, cached, hidden when private, unknown handles reported", async () => {
-    const me = new ObjectId(aarav.id);
-    const aaravProfile = await db.collection("profiles").findOne({ userId: me });
-    const restore = { githubUsername: aaravProfile.githubUsername ?? null, codeforcesHandle: aaravProfile.codeforcesHandle ?? null, visibility: aaravProfile.visibility };
-    try {
-      await db.collection("profiles").updateOne({ userId: me }, { $set: { githubUsername: "torvalds", codeforcesHandle: "tourist", "visibility.github": true, "visibility.codingStats": true } });
-      await db.collection("external_profiles").deleteMany({ userId: me });
-      const page = await call(`/u/${aarav.id}`, { cookie: riya.cookie });
-      assert.ok(page.data.includes("@torvalds"), "GitHub card missing");
-      const gh = await db.collection("external_profiles").findOne({ userId: me, provider: "github" });
-      const cf = await db.collection("external_profiles").findOne({ userId: me, provider: "codeforces" });
-      if (gh.status === "ok") {
-        assert.ok(gh.data.publicRepos > 0 && page.data.includes("Repositories"));
-        liveNotes.push("GitHub: live stats loaded");
+    await step("re-sync: take-downs stay down; vanished listings close only after a good fetch; returning ones reopen", async () => {
+      const source = "arbeitnow";
+      const now = new Date();
+      const base = { companyName: "Smoke GmbH", description: "x", type: "full_time", workMode: "onsite", location: "Berlin", experienceLevel: "1-3", requiredSkills: ["Python"], source, applyMethod: "external", applyUrl: "https://www.arbeitnow.com/", postedAt: now, createdAt: now, updatedAt: now };
+      const { insertedIds } = await db.collection("opportunities").insertMany([
+        { ...base, title: "Smoke taken down", externalId: `smoke-down-${stamp}`, status: "published", lastSeenAt: now },
+        { ...base, title: "Smoke vanished", externalId: `smoke-gone-${stamp}`, status: "published", lastSeenAt: new Date(now - 86_400_000) },
+      ]);
+      const [downId, ghostId] = Object.values(insertedIds);
+      assert.equal((await adminPost(`/api/admin/listings/${downId}`, { action: "take_down", note: "Smoke: not a student role." })).data.status, "rejected");
+      await db.collection("integrations").updateOne({ key: source }, { $set: { lastRunAt: new Date() } }, { upsert: true });
+      assert.equal((await call(`/api/admin/integrations/${source}/sync`, { method: "POST", cookie: admin.cookie, json: {} })).res.status, 429, "sync allowed inside the interval");
+      assert.equal((await call(`/api/admin/integrations/${source}/sync`, { method: "POST", cookie: aarav.cookie, json: {} })).res.status, 403);
+      await db.collection("integrations").updateOne({ key: source }, { $set: { lastRunAt: new Date(Date.now() - 3_600_000) } });
+      const res = await call(`/api/admin/integrations/${source}/sync`, { method: "POST", cookie: admin.cookie, json: {} });
+      assert.equal((await db.collection("opportunities").findOne({ _id: downId })).status, "rejected", "take-down undone by sync");
+      const ghost = await db.collection("opportunities").findOne({ _id: ghostId });
+      if (res.res.status === 200) {
+        assert.equal(ghost.status, "closed", "vanished listing still open after a good fetch");
+        liveNotes.push(`re-sync: Arbeitnow answered (${res.data.stats.fetched} jobs)`);
       } else {
-        assert.equal(gh.status, "error", JSON.stringify(gh));
-        assert.ok(page.data.includes("GitHub isn"), "GitHub outage not explained on the page");
-        liveNotes.push(`GitHub: unreachable → fallback message shown (${gh.error})`);
+        assert.equal(res.res.status, 502, JSON.stringify(res.data));
+        assert.equal(ghost.status, "published", "a failed fetch closed listings");
+        liveNotes.push(`re-sync: Arbeitnow unreachable → checked that nothing was closed (${res.data.error})`);
       }
-      if (cf.status === "ok") {
-        assert.ok(cf.data.rating > 2000 && page.data.includes("Best rank"));
-        liveNotes.push("Codeforces: live stats loaded");
-      } else {
-        assert.equal(cf.status, "error", JSON.stringify(cf));
-        assert.ok(page.data.includes("Codeforces isn"), "Codeforces outage not explained on the page");
-        liveNotes.push(`Codeforces: unreachable → fallback message shown (${cf.error})`);
+      const page = await call("/admin/integrations", { cookie: admin.cookie });
+      assert.ok(page.data.includes("Remotive") && page.data.includes("Arbeitnow") && page.data.includes("Judge0"), "integrations page");
+      await db.collection("opportunities").deleteMany({ _id: { $in: [downId, ghostId] } });
+    });
+
+    await step("GitHub and Codeforces stats: fetched or fallen back, cached, hidden when private, unknown handles reported", async () => {
+      const me = new ObjectId(aarav.id);
+      const aaravProfile = await db.collection("profiles").findOne({ userId: me });
+      const restore = { githubUsername: aaravProfile.githubUsername ?? null, codeforcesHandle: aaravProfile.codeforcesHandle ?? null, visibility: aaravProfile.visibility };
+      try {
+        await db.collection("profiles").updateOne({ userId: me }, { $set: { githubUsername: "torvalds", codeforcesHandle: "tourist", "visibility.github": true, "visibility.codingStats": true } });
+        await db.collection("external_profiles").deleteMany({ userId: me });
+        const page = await call(`/u/${aarav.id}`, { cookie: riya.cookie });
+        assert.ok(page.data.includes("@torvalds"), "GitHub card missing");
+        const gh = await db.collection("external_profiles").findOne({ userId: me, provider: "github" });
+        const cf = await db.collection("external_profiles").findOne({ userId: me, provider: "codeforces" });
+        if (gh.status === "ok") {
+          assert.ok(gh.data.publicRepos > 0 && page.data.includes("Repositories"));
+          liveNotes.push("GitHub: live stats loaded");
+        } else {
+          assert.equal(gh.status, "error", JSON.stringify(gh));
+          assert.ok(page.data.includes("GitHub isn"), "GitHub outage not explained on the page");
+          liveNotes.push(`GitHub: unreachable → fallback message shown (${gh.error})`);
+        }
+        if (cf.status === "ok") {
+          assert.ok(cf.data.rating > 2000 && page.data.includes("Best rank"));
+          liveNotes.push("Codeforces: live stats loaded");
+        } else {
+          assert.equal(cf.status, "error", JSON.stringify(cf));
+          assert.ok(page.data.includes("Codeforces isn"), "Codeforces outage not explained on the page");
+          liveNotes.push(`Codeforces: unreachable → fallback message shown (${cf.error})`);
+        }
+
+        // A recent attempt isn't repeated on the next view (cache / failure back-off).
+        await call(`/u/${aarav.id}`, { cookie: riya.cookie });
+        assert.equal(String((await db.collection("external_profiles").findOne({ _id: gh._id })).attemptedAt), String(gh.attemptedAt), "GitHub called again straight away");
+
+        // Hidden GitHub: other viewers see neither the link nor the card.
+        await db.collection("profiles").updateOne({ userId: me }, { $set: { "visibility.github": false } });
+        assert.ok(!(await call(`/u/${aarav.id}`, { cookie: riya.cookie })).data.includes("@torvalds"), "hidden GitHub shown");
+        await db.collection("profiles").updateOne({ userId: me }, { $set: { "visibility.github": true } });
+
+        // A stored copy survives an outage: mark it stale and failing, it's still shown.
+        await db.collection("external_profiles").updateOne({ _id: gh._id }, { $set: { status: "error", error: "GitHub took too long to respond.", attemptedAt: new Date(), fetchedAt: new Date(Date.now() - 86_400_000), data: { login: "torvalds", name: null, publicRepos: 7, followers: 1, following: 0, totalStars: 3, topLanguages: [], featured: [], lastPushAt: null } } });
+        const stale = await call(`/u/${aarav.id}`, { cookie: riya.cookie });
+        assert.ok(stale.data.includes("Repositories") && stale.data.includes("showing the last copy"), "last good copy not shown during an outage");
+
+        // Manual refresh: signed-in owner only, then a cooldown.
+        assert.equal((await call("/api/profile/external", { method: "POST" })).res.status, 401);
+        await db.collection("external_profiles").updateMany({ userId: me }, { $set: { attemptedAt: new Date(Date.now() - 600_000) } });
+        const r1 = await call("/api/profile/external", { method: "POST", cookie: aarav.cookie });
+        assert.equal(r1.res.status, 200, JSON.stringify(r1.data));
+        assert.ok(["ok", "error"].includes(r1.data.github.status));
+        assert.equal((await call("/api/profile/external", { method: "POST", cookie: aarav.cookie })).res.status, 429);
+      } finally {
+        await db.collection("profiles").updateOne({ userId: me }, { $set: restore });
+        await db.collection("external_profiles").deleteMany({ userId: me });
       }
+    });
+    if (liveNotes.length) console.log(`  live external services:\n    ${liveNotes.join("\n    ")}`);
+  }
 
-      // A recent attempt isn't repeated on the next view (cache / failure back-off).
-      await call(`/u/${aarav.id}`, { cookie: riya.cookie });
-      assert.equal(String((await db.collection("external_profiles").findOne({ _id: gh._id })).attemptedAt), String(gh.attemptedAt), "GitHub called again straight away");
-
-      // Hidden GitHub: other viewers see neither the link nor the card.
-      await db.collection("profiles").updateOne({ userId: me }, { $set: { "visibility.github": false } });
-      assert.ok(!(await call(`/u/${aarav.id}`, { cookie: riya.cookie })).data.includes("@torvalds"), "hidden GitHub shown");
-      await db.collection("profiles").updateOne({ userId: me }, { $set: { "visibility.github": true } });
-
-      // A stored copy survives an outage: mark it stale and failing, it's still shown.
-      await db.collection("external_profiles").updateOne({ _id: gh._id }, { $set: { status: "error", error: "GitHub took too long to respond.", attemptedAt: new Date(), fetchedAt: new Date(Date.now() - 86_400_000), data: { login: "torvalds", name: null, publicRepos: 7, followers: 1, following: 0, totalStars: 3, topLanguages: [], featured: [], lastPushAt: null } } });
-      const stale = await call(`/u/${aarav.id}`, { cookie: riya.cookie });
-      assert.ok(stale.data.includes("Repositories") && stale.data.includes("showing the last copy"), "last good copy not shown during an outage");
-
-      // Manual refresh: signed-in owner only, then a cooldown.
-      assert.equal((await call("/api/profile/external", { method: "POST" })).res.status, 401);
-      await db.collection("external_profiles").updateMany({ userId: me }, { $set: { attemptedAt: new Date(Date.now() - 600_000) } });
-      const r1 = await call("/api/profile/external", { method: "POST", cookie: aarav.cookie });
-      assert.equal(r1.res.status, 200, JSON.stringify(r1.data));
-      assert.ok(["ok", "error"].includes(r1.data.github.status));
-      assert.equal((await call("/api/profile/external", { method: "POST", cookie: aarav.cookie })).res.status, 429);
-    } finally {
-      await db.collection("profiles").updateOne({ userId: me }, { $set: restore });
-      await db.collection("external_profiles").deleteMany({ userId: me });
+  // ── Phase 11: security and operations ──────────────────────────
+  await step("security headers on pages and APIs; no framework fingerprint", async () => {
+    for (const path of ["/", "/api/health"]) {
+      const res = await fetch(BASE + path);
+      const csp = res.headers.get("content-security-policy") ?? "";
+      assert.ok(csp.includes("frame-ancestors 'none'") && csp.includes("object-src 'none'"), `${path}: CSP missing`);
+      assert.equal(res.headers.get("x-frame-options"), "DENY", path);
+      assert.equal(res.headers.get("x-content-type-options"), "nosniff", path);
+      assert.ok(res.headers.get("referrer-policy"), path);
+      assert.equal(res.headers.get("x-powered-by"), null, `${path}: X-Powered-By sent`);
     }
   });
-  if (liveNotes.length) console.log(`  live external services:\n    ${liveNotes.join("\n    ")}`);
+
+  await step("cross-site API writes are refused before they reach the route", async () => {
+    const evil = await fetch(`${BASE}/api/profile/basics`, { method: "PATCH", headers: { Origin: "https://evil.example", Cookie: aarav.cookie, "Content-Type": "application/json" }, body: JSON.stringify({ fullName: "Hacked" }) });
+    assert.equal(evil.status, 403);
+    const opaque = await fetch(`${BASE}/api/reports`, { method: "POST", headers: { Origin: "null", Cookie: aarav.cookie, "Content-Type": "application/json" }, body: "{}" });
+    assert.equal(opaque.status, 403);
+    const p = await db.collection("profiles").findOne({ userId: new ObjectId(aarav.id) });
+    assert.notEqual(p.fullName, "Hacked");
+    // Same-site and non-browser requests still reach the route (and its own auth checks).
+    assert.equal((await call("/api/profile/basics", { method: "PATCH", json: { fullName: "x" } })).res.status, 401);
+    assert.equal((await fetch(`${BASE}/api/profile/basics`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: "{}" })).status, 401);
+    // Reads are never blocked by the origin check.
+    assert.equal((await fetch(`${BASE}/api/health`, { headers: { Origin: "https://evil.example" } })).status, 200);
+  });
+
+  await step("health endpoint: database ping, flags only, never cached", async () => {
+    const res = await fetch(`${BASE}/api/health`);
+    const body = await res.json();
+    assert.equal(res.status, 200);
+    assert.equal(body.status, "ok");
+    assert.equal(body.mode, "database");
+    assert.equal(body.database.ok, true);
+    assert.match(res.headers.get("cache-control") ?? "", /no-store/);
+    assert.ok(!JSON.stringify(body).match(/mongodb|secret|key|token|password/i), "health leaks configuration");
+  });
+
+  await step("rate limits are stored in MongoDB (shared by every server instance)", async () => {
+    const appLimits = await db.collection("rate_limits").countDocuments({ _id: { $regex: `:${aarav.id}:` } });
+    assert.ok(appLimits > 0, "no app rate-limit counters in MongoDB");
+    const ttl = (await db.collection("rate_limits").indexes()).find((i) => i.key.expiresAt === 1);
+    assert.equal(ttl?.expireAfterSeconds, 0, "rate_limits has no TTL index");
+    assert.ok((await db.collection("rateLimit").countDocuments({})) > 0, "Better Auth sign-in limits not stored in MongoDB");
+  });
 
   await mongo.close();
 } else {

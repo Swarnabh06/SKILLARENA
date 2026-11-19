@@ -9,7 +9,7 @@ import { RecruiterError, setCompanyLogo } from "@/services/recruiter";
 export async function POST(request) {
   const { user, response } = await requireApiUser(request, { roles: ["recruiter"] });
   if (response) return response;
-  const limited = limitOrNull(`logo:${user.id}`, { limit: 10, windowMs: 10 * 60_000 });
+  const limited = await limitOrNull(`logo:${user.id}`, { limit: 10, windowMs: 10 * 60_000 });
   if (limited) return limited;
   let form;
   try {

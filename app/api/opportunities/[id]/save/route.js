@@ -7,7 +7,7 @@ import { OpportunityError, setSaved } from "@/services/opportunities";
 async function handle(request, params, saved) {
   const { user, response } = await requireApiUser(request, { roles: ["student"] });
   if (response) return response;
-  const limited = limitOrNull(`save:${user.id}`, { limit: 60, windowMs: 60_000 });
+  const limited = await limitOrNull(`save:${user.id}`, { limit: 60, windowMs: 60_000 });
   if (limited) return limited;
   const { id } = await params;
   try {

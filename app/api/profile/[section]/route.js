@@ -16,7 +16,7 @@ export async function PATCH(request, { params }) {
   const { user, response } = await requireApiUser(request);
   if (response) return response;
 
-  const limited = limitOrNull(`profile:${user.id}`, { limit: 30, windowMs: 60_000 });
+  const limited = await limitOrNull(`profile:${user.id}`, { limit: 30, windowMs: 60_000 });
   if (limited) return limited;
 
   const { data, response: invalid } = await parseJson(request, schema);

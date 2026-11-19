@@ -5,6 +5,9 @@ import { limitOrNull } from "@/lib/utils/rateLimit";
 import { runSchema } from "@/lib/validations/algoarena";
 import { SubmissionError, runCode } from "@/services/submissions";
 
+// Judging can take a while (several tests through Judge0); allow up to a minute on serverless hosts.
+export const maxDuration = 60;
+
 /**
  * POST /api/algoarena/run — run code on the sample tests (or custom input).
  * With a code runner configured this needs a signed-in user (it spends
@@ -17,7 +20,7 @@ export async function POST(request) {
     if (response) return response;
     key = `run:${user.id}`;
   }
-  const limited = limitOrNull(key, { limit: 20, windowMs: 60_000 });
+  const limited = await limitOrNull(key, { limit: 20, windowMs: 60_000 });
   if (limited) return limited;
 
   const { data, response: invalid } = await parseJson(request, runSchema);

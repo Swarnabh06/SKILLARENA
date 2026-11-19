@@ -11,7 +11,10 @@
     "make-admin": "node scripts/make-admin.mjs",
     "test:seed": "node scripts/test-seed.mjs",
     "dev:memory-db": "node scripts/memory-db.mjs",
-    "test:external": "node scripts/test-external.mjs"
+    "test:external": "node scripts/test-external.mjs",
+    "test": "node scripts/run-tests.mjs",
+    "test:smoke": "node scripts/smoke-api.mjs",
+    "test:security": "node scripts/test-security.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

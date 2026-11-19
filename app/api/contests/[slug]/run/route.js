@@ -6,11 +6,14 @@ import { contestRunSchema } from "@/lib/validations/algoarena";
 import { getContestProblemRef } from "@/services/contests";
 import { runCode } from "@/services/submissions";
 
+// Judging can take a while (several tests through Judge0); allow up to a minute on serverless hosts.
+export const maxDuration = 60;
+
 /** POST /api/contests/:slug/run — run on sample tests; the problem must belong to a started contest. */
 export async function POST(request, { params }) {
   const { user, response } = await requireApiUser(request);
   if (response) return response;
-  const limited = limitOrNull(`run:${user.id}`, { limit: 20, windowMs: 60_000 });
+  const limited = await limitOrNull(`run:${user.id}`, { limit: 20, windowMs: 60_000 });
   if (limited) return limited;
   const { data, response: invalid } = await parseJson(request, contestRunSchema);
   if (invalid) return invalid;

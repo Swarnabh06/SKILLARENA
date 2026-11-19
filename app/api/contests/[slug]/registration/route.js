@@ -8,7 +8,7 @@ import { register, unregister } from "@/services/contests";
 async function handle(request, params, action) {
   const { user, response } = await requireApiUser(request, { roles: ["student"] });
   if (response) return response;
-  const limited = limitOrNull(`contest-reg:${user.id}`, { limit: 20, windowMs: 60_000 });
+  const limited = await limitOrNull(`contest-reg:${user.id}`, { limit: 20, windowMs: 60_000 });
   if (limited) return limited;
   const { slug } = await params;
   try {

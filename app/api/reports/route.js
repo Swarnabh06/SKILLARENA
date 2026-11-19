@@ -10,7 +10,7 @@ export async function POST(request) {
   if (response) return response;
   const parsed = await parseJson(request, reportSchema);
   if (parsed.response) return parsed.response;
-  const limited = limitOrNull(`report:${user.id}`, { limit: 20, windowMs: 60 * 60_000 });
+  const limited = await limitOrNull(`report:${user.id}`, { limit: 20, windowMs: 60 * 60_000 });
   if (limited) return limited;
   try {
     return NextResponse.json(await createReport(user, parsed.data), { status: 201 });

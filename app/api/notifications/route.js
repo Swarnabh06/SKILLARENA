@@ -17,7 +17,7 @@ const readSchema = z.object({ ids: z.array(z.string().max(40)).max(100).optional
 export async function POST(request) {
   const { user, response } = await requireApiUser(request);
   if (response) return response;
-  const limited = limitOrNull(`notifications:${user.id}`, { limit: 60, windowMs: 60_000 });
+  const limited = await limitOrNull(`notifications:${user.id}`, { limit: 60, windowMs: 60_000 });
   if (limited) return limited;
   const { data, response: invalid } = await parseJson(request, readSchema);
   if (invalid) return invalid;
