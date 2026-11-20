@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import { NextResponse, connection } from "next/server";
 import { connectToDatabase } from "@/lib/db/mongoose";
-import { isExecutionConfigured } from "@/lib/execution/judge0";
+import { executionMode } from "@/lib/execution/engine";
 import { isDatabaseConfigured } from "@/lib/utils/dataMode";
 
 /**
@@ -11,7 +11,7 @@ import { isDatabaseConfigured } from "@/lib/utils/dataMode";
 export async function GET() {
   await connection();
   const started = Date.now();
-  const body = { status: "ok", mode: isDatabaseConfigured() ? "database" : "demo", codeRunner: isExecutionConfigured() ? "judge0" : "demo", time: new Date().toISOString() };
+  const body = { status: "ok", mode: isDatabaseConfigured() ? "database" : "demo", codeRunner: executionMode(), time: new Date().toISOString() };
   if (isDatabaseConfigured()) {
     try {
       await connectToDatabase();

@@ -1,6 +1,6 @@
 import "server-only";
 import { ExternalApiError } from "@/lib/api/http";
-import { fetchArbeitnowJobs, fetchRemotiveJobs } from "@/lib/api/providers";
+import { adzunaConfigured, fetchAdzunaJobs, fetchArbeitnowJobs, fetchHimalayasJobs, fetchJobicyJobs, fetchRemotiveJobs } from "@/lib/api/providers";
 import { connectToDatabase } from "@/lib/db/mongoose";
 import { Integration, Opportunity, Skill } from "@/lib/db/models";
 import { isDatabaseConfigured } from "@/lib/utils/dataMode";
@@ -13,6 +13,10 @@ import { isDatabaseConfigured } from "@/lib/utils/dataMode";
 export const SOURCES = {
   remotive: { label: "Remotive", fetch: fetchRemotiveJobs, minIntervalMs: 6 * 3_600_000, autoIntervalMs: 6 * 3_600_000, site: "https://remotive.com" },
   arbeitnow: { label: "Arbeitnow", fetch: fetchArbeitnowJobs, minIntervalMs: 30 * 60_000, autoIntervalMs: 3 * 3_600_000, site: "https://www.arbeitnow.com" },
+  himalayas: { label: "Himalayas", fetch: fetchHimalayasJobs, minIntervalMs: 60 * 60_000, autoIntervalMs: 6 * 3_600_000, site: "https://himalayas.app" },
+  jobicy: { label: "Jobicy", fetch: fetchJobicyJobs, minIntervalMs: 60 * 60_000, autoIntervalMs: 6 * 3_600_000, site: "https://jobicy.com" },
+  // India listings (incl. internships); needs a free key, so it's skipped until ADZUNA_APP_ID/KEY are set.
+  adzuna: { label: "Adzuna (India)", fetch: fetchAdzunaJobs, minIntervalMs: 60 * 60_000, autoIntervalMs: 6 * 3_600_000, site: "https://www.adzuna.in", enabled: adzunaConfigured },
 };
 const LOCK_MS = 5 * 60_000;
 const MAX_AGE_MS = 60 * 86_400_000; // external listings older than this are closed
@@ -22,6 +26,11 @@ export class SyncError extends Error {
     super(message);
     this.status = status;
   }
+}
+
+/** Sources that need a key are skipped until it's set. */
+export function isEnabled(key) {
+  return SOURCES[key]?.enabled ? SOURCES[key].enabled() : Boolean(SOURCES[key]);
 }
 
 /** When this source may sync again (null = now). */
@@ -61,6 +70,7 @@ export async function syncSource(key, { trigger = "admin", auto = false } = {}) 
   const source = SOURCES[key];
   if (!source) throw new SyncError("Unknown job board.", 404);
   if (!isDatabaseConfigured()) throw new SyncError("Job imports need a connected database.", 503);
+  if (!isEnabled(key)) return { skipped: "not_configured" };
   await connectToDatabase();
 
   const claimed = await claim(key, trigger, auto);
@@ -117,7 +127,7 @@ export async function syncSource(key, { trigger = "admin", auto = false } = {}) 
 export async function syncDueSources({ trigger = "auto" } = {}) {
   if (!isDatabaseConfigured()) return {};
   const out = {};
-  for (const key of Object.keys(SOURCES)) out[key] = await syncSource(key, { trigger, auto: true });
+  for (const key of Object.keys(SOURCES)) if (isEnabled(key)) out[key] = await syncSource(key, { trigger, auto: true });
   return out;
 }
 
@@ -126,5 +136,5 @@ export async function anySourceDue() {
   if (!isDatabaseConfigured()) return false;
   await connectToDatabase();
   const rows = await Integration.find({}, { key: 1, lastRunAt: 1 }).lean();
-  return Object.keys(SOURCES).some((key) => !nextAllowedAt(key, rows.find((r) => r.key === key), { auto: true }));
+  return Object.keys(SOURCES).some((key) => isEnabled(key) && !nextAllowedAt(key, rows.find((r) => r.key === key), { auto: true }));
 }

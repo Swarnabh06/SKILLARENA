@@ -42,7 +42,7 @@ const Stat = ({ label, value }) => (
 /** Status of every external service, with "Sync now" for the job boards. */
 export default function IntegrationsPanel({ data }) {
   const { run, busy, error } = useAdminAction();
-  const { judge0, github, codeforces } = data;
+  const { runner, github, codeforces } = data;
   return (
     <div className="space-y-3">
       <ErrorLine error={error} />
@@ -55,7 +55,7 @@ export default function IntegrationsPanel({ data }) {
               delay={i * 0.05}
               title={<a href={b.site} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-arena-800">{b.label} <ExternalLink size={13} aria-hidden="true" /></a>}
               sub={`Job board import · at most every ${b.intervalHours < 1 ? `${b.intervalHours * 60} minutes` : `${b.intervalHours} hours`}; automatic every ${b.autoHours} hours`}
-              status={b.running ? <Status>Running…</Status> : b.lastError ? <Status warn>Last run failed</Status> : b.lastSuccessAt ? <Status ok>Working</Status> : <Status>Never run</Status>}
+              status={!b.configured ? <Status>Not configured</Status> : b.running ? <Status>Running…</Status> : b.lastError ? <Status warn>Last run failed</Status> : b.lastSuccessAt ? <Status ok>Working</Status> : <Status>Never run</Status>}
             >
               <div className="grid grid-cols-3 gap-2">
                 <Stat label="Live listings" value={b.live} />
@@ -68,8 +68,9 @@ export default function IntegrationsPanel({ data }) {
                 </p>
               )}
               {b.lastError && <p className="rounded-lg bg-danger-50 px-3 py-2 text-xs text-danger-800">{b.lastError} {b.lastRunAt && <>(<TimeAgo date={b.lastRunAt} />)</>} The listings already imported stay up.</p>}
+              {!b.configured && <p className="text-xs text-muted">Needs a free API key: set ADZUNA_APP_ID and ADZUNA_APP_KEY in Vercel, then redeploy.</p>}
               <div className="mt-auto flex flex-wrap items-center gap-2">
-                <ActionButton tone="arena" busy={busy === b.key} disabled={!due || b.running} onClick={() => run(`/api/admin/integrations/${b.key}/sync`, {}, { key: b.key })}>
+                <ActionButton tone="arena" busy={busy === b.key} disabled={!b.configured || !due || b.running} onClick={() => run(`/api/admin/integrations/${b.key}/sync`, {}, { key: b.key })}>
                   <RefreshCw size={13} aria-hidden="true" /> Sync now
                 </ActionButton>
                 {!due && <span className="text-xs text-muted">Next sync allowed {fmt(b.nextAt)}{b.key === "remotive" ? " (Remotive asks for a few requests a day at most)" : ""}</span>}
@@ -107,17 +108,17 @@ export default function IntegrationsPanel({ data }) {
         </Card>
 
         <Card
-          title="Judge0 code runner"
+          title={`Code runner · ${runner.label}`}
           sub="Runs and judges AlgoArena and contest submissions"
           delay={0.2}
-          status={!judge0.configured ? <Status>Not configured</Status> : judge0.ok ? <Status ok>Reachable{judge0.version ? ` · v${judge0.version}` : ""}</Status> : <Status warn>Unreachable</Status>}
+          status={!runner.configured ? <Status>Not configured</Status> : runner.ok ? <Status ok>Working{runner.version ? ` · v${runner.version}` : ""}</Status> : <Status warn>Unreachable</Status>}
         >
-          {!judge0.configured ? (
-            <p className="text-xs text-muted">Demo mode: submissions are saved as &ldquo;not executed&rdquo; and earn no XP. Set JUDGE0_URL (and a key for RapidAPI) to run code.</p>
-          ) : judge0.ok ? (
-            <p className="text-xs text-muted">Answered in {judge0.latencyMs} ms.</p>
+          {!runner.configured ? (
+            <p className="text-xs text-muted">Demo mode: submissions are saved as &ldquo;not executed&rdquo; and earn no XP. Set CODE_RUNNER=paiza (free, no key) or JUDGE0_URL to run code.</p>
+          ) : runner.ok ? (
+            <p className="text-xs text-muted">A test program ran in {runner.latencyMs} ms.{runner.mode === "paiza" ? " Free public runner: programs stop after about 1 second." : ""}</p>
           ) : (
-            <p className="rounded-lg bg-danger-50 px-3 py-2 text-xs text-danger-800">{judge0.error} Students see &ldquo;couldn&apos;t reach the code runner&rdquo; and nothing is scored until it&apos;s back.</p>
+            <p className="rounded-lg bg-danger-50 px-3 py-2 text-xs text-danger-800">{runner.error} Students see &ldquo;couldn&apos;t reach the code runner&rdquo; and nothing is scored until it&apos;s back.</p>
           )}
         </Card>
       </div>

@@ -280,7 +280,8 @@ await step("problem library and workspace render without hidden tests", async ()
 
 const runProbe = await call("/api/algoarena/run", { method: "POST", cookie: aarav.cookie, json: { slug: "two-sum", language: "javascript", code: REFERENCE_SOLUTIONS["two-sum"] } });
 const judgeMode = runProbe.data.executed === true;
-console.log(`  (code runner: ${judgeMode ? "Judge0 API" : "demo mode"})`);
+const runnerName = (await call("/api/health")).data?.codeRunner;
+console.log(`  (code runner: ${judgeMode ? (runnerName === "paiza" ? "Paiza.io" : "Judge0") : "demo mode"})`);
 
 await step("run returns only sample tests", async () => {
   assert.equal(runProbe.res.status, 200, JSON.stringify(runProbe.data));
@@ -333,7 +334,9 @@ if (!judgeMode) {
     assert.equal(again.data.status, "accepted");
     assert.equal(again.data.rewards.solveXp, 0, "XP awarded twice");
     const after = await xpOf(fresh);
-    assert.equal(after - before, 10 + (first.data.rewards.dailyXp || 0), `XP went from ${before} to ${after}`);
+    // Solve XP plus whatever the same submission unlocked: daily bonus, streak milestone, first badges.
+    const extra = (first.data.rewards.dailyXp || 0) + (first.data.rewards.streakXp || 0) + (first.data.rewards.badgeXp || 0);
+    assert.equal(after - before, 10 + extra, `XP went from ${before} to ${after}`);
   });
 
   await step("wrong answer on a sample shows input, expected and actual", async () => {
@@ -1183,7 +1186,7 @@ if (process.env.MONGODB_URI) {
         liveNotes.push(`re-sync: Arbeitnow unreachable → checked that nothing was closed (${res.data.error})`);
       }
       const page = await call("/admin/integrations", { cookie: admin.cookie });
-      assert.ok(page.data.includes("Remotive") && page.data.includes("Arbeitnow") && page.data.includes("Judge0"), "integrations page");
+      assert.ok(["Remotive", "Arbeitnow", "Himalayas", "Jobicy", "Adzuna", "Code runner"].every((name) => page.data.includes(name)), "integrations page");
       await db.collection("opportunities").deleteMany({ _id: { $in: [downId, ghostId] } });
     });
 

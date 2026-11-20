@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiError, parseJson, requireApiUser } from "@/lib/auth/guards";
-import { ExecutionUnavailableError, isExecutionConfigured } from "@/lib/execution/judge0";
+import { ExecutionUnavailableError, isExecutionConfigured } from "@/lib/execution/engine";
 import { limitOrNull } from "@/lib/utils/rateLimit";
 import { runSchema } from "@/lib/validations/algoarena";
 import { SubmissionError, runCode } from "@/services/submissions";

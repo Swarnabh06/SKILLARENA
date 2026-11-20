@@ -7,6 +7,7 @@ import { Application, Company, Opportunity, SavedOpportunity } from "@/lib/db/mo
 import { isDatabaseConfigured } from "@/lib/utils/dataMode";
 import { logActivity } from "./activity";
 import { scoreOpportunity } from "./recommendations";
+import { SOURCE_LABEL } from "@/lib/utils/format";
 
 export class OpportunityError extends Error {
   constructor(message, status = 400) {
@@ -34,7 +35,7 @@ export function parseFilters(params = {}) {
     mode: list(params.mode),
     experience: pick(params.experience),
     location: pick(params.location).slice(0, 60),
-    source: pick(params.source),
+    source: Object.hasOwn(SOURCE_LABEL, pick(params.source)) ? pick(params.source) : "",
     sort: SORTS.includes(pick(params.sort)) ? pick(params.sort) : "match",
     tab: TABS.includes(pick(params.tab)) ? pick(params.tab) : "all",
     page: Math.max(1, Math.min(50, Number(pick(params.page)) || 1)),

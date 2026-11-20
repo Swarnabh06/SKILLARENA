@@ -2,7 +2,7 @@ import "server-only";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/db/mongoose";
 import { DailyChallengeCompletion, ProblemSubmission } from "@/lib/db/models";
-import { isExecutionConfigured } from "@/lib/execution/judge0";
+import { executionMode, isExecutionConfigured } from "@/lib/execution/engine";
 import { runCustom, runTests } from "@/lib/execution/runner";
 import { dayKey } from "@/lib/utils/time";
 import { evaluateAchievements } from "./achievements";
@@ -39,9 +39,9 @@ export async function runCode({ slug, language, code, customInput }, { allowUnpu
   }
 
   if (typeof customInput === "string") {
-    return { mode: "judge0", executed: true, custom: await runCustom({ language, code, input: customInput }) };
+    return { mode: executionMode(), executed: true, custom: await runCustom({ language, code, input: customInput }) };
   }
-  return { mode: "judge0", executed: true, ...(await runTests({ language, code, tests: sampleTests(problem) })) };
+  return { mode: executionMode(), executed: true, ...(await runTests({ language, code, tests: sampleTests(problem) })) };
 }
 
 /**
@@ -82,7 +82,7 @@ export async function judgeAndRecord(user, problem, { language, code, contestId 
     memoryKb: verdict.memoryKb,
     failedTest: failed ? { index: failed.index, hidden: failed.hidden } : { index: null, hidden: null },
     compileOutput: verdict.compileOutput || null,
-    executionMode: "judge0",
+    executionMode: executionMode(),
     isDailyChallenge,
   });
   return { executed: true, submission, verdict, failed };
@@ -136,7 +136,7 @@ export async function applyRewards(user, problem, submission, { accepted, daily 
 export function verdictPayload(judged) {
   const { verdict, failed, submission } = judged;
   return {
-    mode: "judge0",
+    mode: executionMode(),
     executed: true,
     submissionId: String(submission._id),
     status: verdict.status,
@@ -166,7 +166,7 @@ export async function submitSolution(user, { slug, language, code }) {
       executed: false,
       submissionId: String(judged.submission._id),
       status: "not_executed",
-      message: "Demo mode: your code was saved but not executed, so it can't be judged and earns no XP. Configure Judge0 to run real submissions.",
+      message: "Demo mode: your code was saved but not executed, so it can't be judged and earns no XP. Set CODE_RUNNER=paiza (free) or Judge0 to run real submissions.",
     };
   }
 
