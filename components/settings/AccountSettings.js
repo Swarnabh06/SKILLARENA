@@ -1,12 +1,61 @@
 "use client";
 
-import { LogOut } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { CheckCircle2, Link2, Loader2, LogOut } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { SaveRow, SectionCard, TextField } from "@/components/profile/fields";
+import GoogleIcon from "@/components/auth/GoogleIcon";
 import { authClient } from "@/lib/auth/client";
 
-export default function AccountSettings({ email, providers }) {
+const LINK_ERRORS = {
+  email_does_not_match: "That Google account uses a different email. Connect the Google account for the email shown above.",
+  account_already_linked_to_different_user: "That Google account is already connected to another SkillArena account.",
+};
+
+/**
+ * Connect Google to an account that was created with email and password.
+ * Linking happens while you're signed in, so nobody can attach their Google
+ * login to someone else's account. Afterwards "Continue with Google" works.
+ */
+function ConnectGoogle({ connected }) {
+  const params = useSearchParams();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(() => {
+    if (!params.has("link_error")) return "";
+    // Better Auth appends its own code: /settings?link_error=google&error=<code>
+    const code = params.getAll("error").find((c) => LINK_ERRORS[c]);
+    return code ? LINK_ERRORS[code] : "Google didn't finish connecting. Try again.";
+  });
+  const justLinked = params.get("linked") === "google";
+
+  async function connect() {
+    setBusy(true);
+    setError("");
+    const { error: err } = await authClient.linkSocial({ provider: "google", callbackURL: "/settings?linked=google", errorCallbackURL: "/settings?link_error=google" });
+    if (err) {
+      setBusy(false);
+      setError(err.message || "Couldn't start connecting Google.");
+    }
+  }
+
+  if (connected) {
+    return (
+      <p className="inline-flex items-center gap-1.5 text-sm text-bridge-800">
+        <CheckCircle2 size={15} aria-hidden="true" /> {justLinked ? "Google is now connected. You can use Continue with Google to sign in." : "Google is connected."}
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      <button type="button" onClick={connect} disabled={busy} className="inline-flex items-center gap-2 rounded-full border border-line bg-panel px-4 py-2 text-sm transition-[translate,border-color] hover:-translate-y-0.5 hover:border-arena-300 disabled:opacity-60">
+        {busy ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <GoogleIcon size={14} />} Connect Google
+      </button>
+      {error && <p role="alert" className="text-sm text-danger-600">{error}</p>}
+    </div>
+  );
+}
+
+export default function AccountSettings({ email, providers, googleEnabled = false }) {
   const router = useRouter();
   const hasPassword = providers.includes("credential");
   const [form, setForm] = useState({ current: "", next: "", confirm: "" });
@@ -65,6 +114,15 @@ export default function AccountSettings({ email, providers }) {
           </div>
         </dl>
       </SectionCard>
+
+      {googleEnabled && (
+        <SectionCard
+          title={<span className="inline-flex items-center gap-1.5"><Link2 size={15} aria-hidden="true" /> Connect Google</span>}
+          description="Sign in with Google as well as your password. Use the Google account with the same email as above."
+        >
+          <ConnectGoogle connected={providers.includes("google")} />
+        </SectionCard>
+      )}
 
       {hasPassword ? (
         <SectionCard
