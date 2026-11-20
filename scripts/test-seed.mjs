@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import { MongoMemoryReplSet } from "mongodb-memory-server";
 import { MongoClient } from "mongodb";
 import mongoose from "mongoose";
+import { problems as CATALOGUE } from "../data/problems/index.js";
 
 const replSet = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
 const env = {
@@ -52,7 +53,7 @@ try {
 
   assert.equal(first.user, 9, "9 demo accounts");
   assert.equal(first.profiles, 9, "a profile per account");
-  assert.equal(first.problems, 14);
+  assert.equal(first.problems, CATALOGUE.length, "every catalogue problem seeded");
   assert.equal(first.questions, 60);
   assert.equal(first.assessments, 12);
   assert.equal(first.opportunities, 12);
