@@ -16,7 +16,7 @@ all sharing one account and profile.
 | Database | MongoDB Atlas with Mongoose |
 | Auth | Better Auth: Google sign-in and email/password, sessions stored in MongoDB |
 | Files | MongoDB GridFS (resumes, avatars) |
-| Integrations | GitHub, Codeforces, Remotive, Arbeitnow, Judge0 (Phase 10) |
+| Integrations | GitHub, Codeforces, LeetCode and CodeChef calendars, Remotive, Arbeitnow, Himalayas, Jobicy, Adzuna, Paiza.io, Judge0 |
 
 ## Getting started
 
@@ -142,12 +142,16 @@ opportunities, upcoming contests with countdowns, recent submissions, badges and
 | `/algoarena` | Problem library: search, difficulty, topic, status and interview filters; acceptance rates; your progress; today's challenge |
 | `/algoarena/:slug` | Coding workspace: problem, hints, your submissions; Monaco editor (Python, Java, C++, JavaScript); sample tests, custom input, Run and Submit |
 | `/algoarena/daily` | Last 14 daily challenges and which ones you completed |
+| `/algoarena/codeforces` | The Codeforces problem set, filtered by rating, tag and name; problems open on Codeforces |
 
 API: `POST /api/algoarena/run`, `POST /api/algoarena/submit` (students), `GET /api/algoarena/submissions?problemId=`.
 
-**Code execution** goes through Judge0 (`lib/execution/`). Set `JUDGE0_URL` (and for RapidAPI's free tier
-`JUDGE0_API_KEY` + `JUDGE0_API_HOST=judge0-ce.p.rapidapi.com`). Without it the workspace runs in a labelled
-**demo mode**: Run shows the expected sample outputs and says nothing was executed; Submit saves the code as
+**Code execution** (`lib/execution/engine.js`) uses, in order:
+1. **Judge0**, when `JUDGE0_URL` is set (for RapidAPI's free tier also `JUDGE0_API_KEY` +
+   `JUDGE0_API_HOST=judge0-ce.p.rapidapi.com`).
+2. **Paiza.io**, when `CODE_RUNNER=paiza`: a free public runner that needs no account. Tests run three at a
+   time; compile errors, timeouts and runtime errors are mapped to the usual verdicts.
+3. Otherwise a labelled **demo mode**: Run shows the expected sample outputs and says nothing was executed; Submit saves the code as
 "not executed", which earns no XP and doesn't count for streaks.
 
 **Rewards** are applied on the server after judging: first-solve XP (easy 10 / medium 30 / hard 50, once per
@@ -155,7 +159,10 @@ problem), the daily-challenge bonus (+15, once per day), and the coding streak (
 submission; 7/30/100-day milestones add bonus XP). Hidden tests never leave the server: a hidden failure only
 reports which test number failed.
 
-Checks: `node scripts/verify-problems.mjs` runs reference solutions against all 59 sample and hidden tests.
+The catalogue has 39 problems: the originals plus 25 more written in LeetCode and Codeforces style
+(`scripts/problem-sources/extra-problems.mjs`). `npm run build:problems` regenerates `data/problems/extra.js`,
+computing every expected output by running the JavaScript reference solution.
+Checks: `node scripts/verify-problems.mjs` runs reference solutions against all 207 sample and hidden tests.
 `scripts/mock-judge0.mjs` is a **dev-only** stand-in for Judge0 that runs JavaScript/Python locally without a
 sandbox; never expose it or use it in production.
 
@@ -308,6 +315,12 @@ Third-party data is fetched on the server only, cached in MongoDB, and shown wit
 | Codeforces | Rating, rank, max rating, best contest rank and a rating chart | none | Same as GitHub |
 | Remotive | Remote software jobs on SkillBridge | none | Listings already imported stay up |
 | Arbeitnow | Tech jobs (mostly Germany) on SkillBridge | none | Same as Remotive |
+| Himalayas | Remote software jobs and internships | none | Same as Remotive |
+| Jobicy | Remote developer jobs | none | Same as Remotive |
+| Adzuna | Jobs and internships in India | `ADZUNA_APP_ID`, `ADZUNA_APP_KEY` (free) | Skipped until the keys are set |
+| Codeforces, LeetCode, CodeChef | Upcoming contests on the Contests page | none | Last saved calendar, per platform |
+| Codeforces problem set | `/algoarena/codeforces` | none | Last saved list |
+| Paiza.io | Running and judging code when `CODE_RUNNER=paiza` | none | Demo mode |
 | Judge0 | Running and judging code (Phase 4) | `JUDGE0_URL`, `JUDGE0_API_KEY`, `JUDGE0_API_HOST` | Demo mode: submissions saved as "not executed", no XP |
 
 - **Profile stats** live in `external_profiles`, one row per student and service. GitHub copies are refreshed
@@ -340,6 +353,20 @@ Third-party data is fetched on the server only, cached in MongoDB, and shown wit
 - `npm run test:external` unit-tests the mappers (HTML to text, skill extraction, pay parsing, both job boards,
   GitHub and Codeforces) without network access. The smoke test's Phase 10 checks use the live services when
   they answer and check the fallback when they don't, and say which happened.
+
+## Contests from SkillArena and elsewhere
+
+- **Recurring SkillArena contests** (`lib/contests/schedule.js`, `services/contestScheduler.js`) are created
+  automatically two weeks ahead: **SkillArena Weekly** every Sunday 10:30 IST (90 minutes, four problems from
+  easy to hard, 5-minute penalty) and **SkillArena Round (Div. 2)** every other Saturday 20:00 IST (two hours,
+  problems A–E worth 500–2500, 10-minute penalty). Problems rotate, least recently used first. Contest slugs
+  come from their number, so scheduling twice never makes duplicates. Scheduling runs when someone opens
+  /contests and from the cron.
+- **Other platforms' calendars**: Codeforces' public API, LeetCode's contest list and CodeChef's contest list,
+  cached per platform in `external_cache` and refreshed in the background every 3 hours. A platform that's
+  down keeps its last list. LeetCode's endpoint is unofficial, so it may change without notice.
+- **Codeforces practice**: names, ratings, tags and solve counts for about 11,500 problems, stored in
+  `cf_problems` and refreshed daily. No statements are copied; every problem links to Codeforces.
 
 ## Security, testing and deployment (Phase 11)
 

@@ -3,7 +3,7 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import Workspace from "@/components/algoarena/Workspace";
 import { getCurrentUser } from "@/lib/auth/session";
-import { isExecutionConfigured } from "@/lib/execution/judge0";
+import { executionMode } from "@/lib/execution/engine";
 import { getChallengeFor } from "@/services/daily";
 import { getProblemForWorkspace } from "@/services/problems";
 
@@ -19,7 +19,7 @@ async function Loader({ params }) {
     <Workspace
       problem={problem}
       isDaily={daily?.problem.slug === slug}
-      execution={isExecutionConfigured() ? "judge0" : "demo"}
+      execution={executionMode()}
       viewer={{ signedIn: Boolean(current), role: current?.user.role ?? null }}
     />
   );

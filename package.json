@@ -14,7 +14,8 @@
     "test:external": "node scripts/test-external.mjs",
     "test": "node scripts/run-tests.mjs",
     "test:smoke": "node scripts/smoke-api.mjs",
-    "test:security": "node scripts/test-security.mjs"
+    "test:security": "node scripts/test-security.mjs",
+    "build:problems": "node scripts/build-problems.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

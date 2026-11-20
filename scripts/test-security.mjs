@@ -63,9 +63,19 @@ test("checkEnv: unsafe or broken production settings are errors", () => {
 test("checkEnv: development is relaxed, optional features only warn", () => {
   const r = checkEnv({ NODE_ENV: "development", MONGODB_URI: "mongodb://127.0.0.1:27017/x", BETTER_AUTH_SECRET: "memory-db-only-secret-not-for-production-0123456789", BETTER_AUTH_URL: "http://localhost:3000" });
   assert.deepEqual(r.errors, []);
-  assert.ok(r.warnings.some((w) => w.includes("JUDGE0_URL")));
+  assert.ok(r.warnings.some((w) => w.includes("No code runner")));
   assert.ok(r.warnings.some((w) => w.includes("GITHUB_TOKEN")));
   assert.ok(r.warnings.some((w) => w.includes("CRON_SECRET")));
+});
+
+test("checkEnv: CODE_RUNNER=paiza counts as a code runner; other values are rejected", () => {
+  const { JUDGE0_URL, JUDGE0_API_KEY, JUDGE0_API_HOST, ...noJudge0 } = good;
+  assert.ok(JUDGE0_URL && JUDGE0_API_KEY && JUDGE0_API_HOST);
+  assert.ok(checkEnv(noJudge0).warnings.some((w) => w.includes("No code runner")), "missing runner not warned");
+  const paiza = checkEnv({ ...noJudge0, CODE_RUNNER: "paiza" });
+  assert.deepEqual(paiza.errors, []);
+  assert.ok(!paiza.warnings.some((w) => w.includes("No code runner")));
+  assert.match(checkEnv({ ...noJudge0, CODE_RUNNER: "piston" }).errors.join(" "), /CODE_RUNNER must be/);
 });
 
 test("securityHeaders: strict CSP and hardening headers; HSTS only in production", () => {

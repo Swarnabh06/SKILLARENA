@@ -36,7 +36,9 @@ preview deployments). They must exist **before the build runs**, which Vercel do
 | `BETTER_AUTH_URL` | yes | Your public URL, e.g. `https://skillarena.vercel.app` (https, no trailing slash) |
 | `NEXT_PUBLIC_APP_TIMEZONE` | no | Calendar time zone for streaks and daily challenges (default `Asia/Kolkata`) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | no | Google sign-in (both or neither) |
-| `JUDGE0_URL` / `JUDGE0_API_KEY` / `JUDGE0_API_HOST` | no | Code execution; without them code runs in labelled demo mode |
+| `CODE_RUNNER` | no | `paiza` runs code on Paiza.io's free public runner (no key). Leave unset for demo mode |
+| `JUDGE0_URL` / `JUDGE0_API_KEY` / `JUDGE0_API_HOST` | no | Judge0 instead of Paiza.io; takes priority when set |
+| `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` | no | Free keys from developer.adzuna.com; adds jobs and internships in India |
 | `GITHUB_TOKEN` | no | Fine-grained token with **no permissions** (public data only); raises GitHub's limit to 5,000 requests/hour |
 | `CRON_SECRET` | no | 16+ random characters; turns on the scheduled job import |
 | `DEMO_USER_PASSWORD` | only for seeding | Remove it after seeding |
@@ -68,9 +70,13 @@ In Google Cloud Console → **APIs and services → Credentials → Create OAuth
 Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, then redeploy. The **Continue with Google** button only
 appears when both are set.
 
-## 5. Judge0 (optional)
+## 5. Code runner
 
-Subscribe to the free tier of **Judge0 CE** on RapidAPI and set:
+The simplest choice is `CODE_RUNNER=paiza`: Paiza.io runs Python, Java, C++ and JavaScript for free without an
+account. It's a shared public service, so heavy use can be slow; **Admin → Integrations** shows whether it
+answers.
+
+For a dedicated runner, subscribe to the free tier of **Judge0 CE** on RapidAPI and set:
 
 ```
 JUDGE0_URL=https://judge0-ce.p.rapidapi.com
@@ -84,12 +90,16 @@ localhost `JUDGE0_URL` in production.
 
 ## 6. First data and the first admin
 
-From your machine, with the production values in `.env.local`:
+From your machine, with the production values in a git-ignored file such as `.env.live` (kept out of
+`.env.local` so `npm run dev` never touches the live database):
 
 ```bash
-npm run seed                                  # optional: sample problems, assessments, contests, listings and demo accounts
-npm run make-admin -- you@example.com         # after signing up on the live site with that email
+node --env-file=.env.live scripts/seed.mjs                          # problems, assessments, contests, listings, demo accounts
+node --env-file=.env.live scripts/make-admin.mjs you@example.com    # after signing up on the live site with that email
 ```
+
+If those fail with `querySrv ECONNREFUSED`, your DNS doesn't answer the SRV lookups `mongodb+srv://` needs.
+Add `--import ./scripts/public-dns.mjs` after `node` to use public DNS for that one command.
 
 The seed loads the problem catalogue and question bank, which the site needs to be useful. Its demo accounts
 and listings are flagged as sample data. Seeding is idempotent, so running it again updates rather than
@@ -112,7 +122,8 @@ Admin can't be chosen at sign-up or granted from the console; `make-admin` is th
 
 - [ ] `/api/health` returns `ok` with `"mode":"database"`
 - [ ] Sign up, finish setup, edit your profile, upload a resume
-- [ ] Open a problem: the editor loads; Run and Submit work (or say "demo mode" if Judge0 isn't set)
+- [ ] Open a problem: the editor loads; Run and Submit work (or say "demo mode" if no runner is set)
+- [ ] /contests shows SkillArena Weekly and Round, and "On other platforms"; /algoarena/codeforces lists problems
 - [ ] SkillBridge shows listings; Admin → Integrations shows each service's status
 - [ ] The function logs have no `[config]` errors
 

@@ -2,6 +2,7 @@ import { Code2 } from "lucide-react";
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import ArenaTabs from "@/components/algoarena/ArenaTabs";
 import DailyChallengeCard from "@/components/algoarena/DailyChallengeCard";
 import ProblemTable from "@/components/algoarena/ProblemTable";
 import DemoBadge from "@/components/common/DemoBadge";
@@ -64,6 +65,7 @@ async function Library() {
         </header>
       </Reveal>
 
+      <ArenaTabs />
       <DailyChallengeCard daily={daily} resetAt={nextDayStart()} streak={current?.profile?.streak} signedIn={Boolean(viewerId)} />
       <ProblemTable problems={library.problems} signedIn={Boolean(viewerId)} />
     </div>

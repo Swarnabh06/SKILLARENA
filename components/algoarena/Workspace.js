@@ -34,7 +34,7 @@ const storage = {
 
 /**
  * The coding workspace: problem on the left, editor + tests on the right,
- * floating Run / Submit bar. `execution` is "judge0" or "demo"; in demo mode
+ * floating Run / Submit bar. `execution` is "judge0", "paiza" or "demo"; in demo mode
  * every result is labelled as not executed.
  */
 export default function Workspace({ problem, isDaily, execution, viewer, contest = null }) {

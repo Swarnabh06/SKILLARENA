@@ -2,6 +2,7 @@ import { ArrowLeft, CalendarDays, CheckCircle2, Circle, Flame } from "lucide-rea
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import ArenaTabs from "@/components/algoarena/ArenaTabs";
 import DifficultyBadge from "@/components/algoarena/DifficultyBadge";
 import Reveal from "@/components/common/Reveal";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -43,6 +44,7 @@ async function History() {
           )}
         </header>
       </Reveal>
+      <ArenaTabs />
 
       <ol className="space-y-2">
         {history.map((h, i) => (

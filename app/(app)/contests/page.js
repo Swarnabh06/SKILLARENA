@@ -1,13 +1,16 @@
 import { Swords } from "lucide-react";
-import { connection } from "next/server";
+import { after, connection } from "next/server";
 import { Suspense } from "react";
 import DemoBadge from "@/components/common/DemoBadge";
 import Reveal from "@/components/common/Reveal";
 import ContestCard from "@/components/contests/ContestCard";
+import ExternalContests from "@/components/contests/ExternalContests";
 import { contests as demoContests } from "@/data/demo/contests";
 import { getCurrentUser } from "@/lib/auth/session";
 import { isDatabaseConfigured } from "@/lib/utils/dataMode";
+import { ensureScheduledContests, scheduleDue } from "@/services/contestScheduler";
 import { ensureContestReminders, listContests } from "@/services/contests";
+import { getExternalContests } from "@/services/externalContests";
 
 export const metadata = { title: "Contests" };
 
@@ -46,7 +49,20 @@ async function Contests() {
   const current = demo ? null : await getCurrentUser();
   const viewer = { signedIn: Boolean(current), role: current?.user.role ?? null };
   if (current?.user.role === "student") await ensureContestReminders(current.user.id);
-  const data = demo ? demoList() : await listContests(current?.user.role === "student" ? current.user.id : null);
+  // The very first visit creates the scheduled contests inline so the page isn't empty; later
+  // top-ups (a new week coming into range) happen after the response is sent.
+  if (!demo && (await scheduleDue())) {
+    const upcoming = await listContests(null);
+    if (!upcoming.upcoming.length && !upcoming.live.length) await ensureScheduledContests();
+    else after(() => ensureScheduledContests().catch((error) => console.error("contest scheduling failed", error)));
+  }
+  const [data, external] = await Promise.all([
+    demo ? demoList() : listContests(current?.user.role === "student" ? current.user.id : null),
+    getExternalContests().catch((error) => {
+      console.error("contest calendar failed", error);
+      return { items: [], platforms: {} };
+    }),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -63,6 +79,7 @@ async function Contests() {
       </Reveal>
       {data.live.length > 0 && <Section title="Live now" items={data.live} viewer={viewer} linked={!demo} />}
       <Section title="Upcoming" items={data.upcoming} viewer={viewer} empty="No contests scheduled yet." linked={!demo} />
+      <ExternalContests data={external} />
       <Section title="Past contests" items={data.past} viewer={viewer} empty="No finished contests yet." linked={!demo} />
     </div>
   );

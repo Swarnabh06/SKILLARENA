@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import SlidingTabs from "@/components/common/SlidingTabs";
 import { EXPERIENCE_LEVELS, OPPORTUNITY_TYPES, WORK_MODES } from "@/data/opportunities";
 import { cn } from "@/lib/utils/cn";
+import { SOURCE_LABEL } from "@/lib/utils/format";
 
 function Chip({ active, onClick, children }) {
   return (
@@ -112,8 +113,7 @@ export default function FilterBar({ filters, counts, signedInStudent }) {
           <select id="src" value={filters.source} onChange={(e) => update({ source: e.target.value })} className="h-9 rounded-full bg-page px-3 text-sm outline-none">
             <option value="">All sources</option>
             <option value="manual">Posted on SkillArena</option>
-            <option value="remotive">Remotive</option>
-            <option value="arbeitnow">Arbeitnow</option>
+            {Object.entries(SOURCE_LABEL).filter(([k]) => k !== "manual").map(([k, label]) => <option key={k} value={k}>{label}</option>)}
           </select>
           <label className="sr-only" htmlFor="sort">Sort</label>
           <select id="sort" value={filters.sort} onChange={(e) => update({ sort: e.target.value === "match" ? "" : e.target.value })} className="h-9 rounded-full bg-page px-3 text-sm outline-none">

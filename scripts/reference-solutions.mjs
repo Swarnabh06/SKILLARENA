@@ -5,6 +5,8 @@
  */
 const read = 'const L = require("fs").readFileSync(0, "utf8").split("\\n");\n';
 
+import { EXTRA_PROBLEMS } from "./problem-sources/extra-problems.mjs";
+
 export const REFERENCE_SOLUTIONS = {
   "two-sum": `${read}
 const n = +L[0]; const a = L[1].trim().split(/\\s+/).map(Number); const t = +L[2];
@@ -91,3 +93,6 @@ const dist = Array(n + 1).fill(Infinity); dist[k] = 0; const done = Array(n + 1)
 for (let it = 0; it < n; it++) { let u = -1; for (let v = 1; v <= n; v++) if (!done[v] && (u === -1 || dist[v] < dist[u])) u = v; if (u === -1 || dist[u] === Infinity) break; done[u] = true; for (const [v, w] of adj[u]) if (dist[u] + w < dist[v]) dist[v] = dist[u] + w; }
 const worst = Math.max(...dist.slice(1)); console.log(worst === Infinity ? -1 : worst);`,
 };
+
+// Second batch: references live next to their problem statements.
+for (const p of EXTRA_PROBLEMS) REFERENCE_SOLUTIONS[p.slug] = p.ref;

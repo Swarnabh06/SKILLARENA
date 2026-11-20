@@ -110,7 +110,7 @@ export default function PrivacyPage() {
           <ul>
             <li><strong>Vercel</strong> hosts the website, and <strong>MongoDB Atlas</strong> stores the database and uploaded files.</li>
             <li><strong>Google</strong> provides the optional sign-in.</li>
-            <li><strong>Judge0</strong> runs the code you submit, so your code and the test input are sent to it for execution.</li>
+            <li><strong>Paiza.io</strong> (or <strong>Judge0</strong>, if configured) runs the code you submit, so your code and the test input are sent to it for execution.</li>
             <li><strong>GitHub and Codeforces:</strong> if you add a GitHub username or Codeforces handle, we fetch your public stats (repositories, languages, rating) from them and show them on your profile, following your visibility settings.</li>
             <li><strong>Remotive and Arbeitnow</strong> supply some job listings. Those listings link to the original site, and when you apply there, their own privacy policy applies.</li>
           </ul>

@@ -1,4 +1,5 @@
 import { demoId } from "../demo/ids.js";
+import { EXTRA_RAW } from "./extra.js";
 
 /**
  * AlgoArena problem catalogue. Every problem uses plain stdin/stdout so the
@@ -354,7 +355,8 @@ const RAW = [
   },
 ];
 
-export const problems = RAW.map((p, i) => ({
+// New problems are appended after the original 14 so existing ids never change.
+export const problems = [...RAW, ...EXTRA_RAW].map((p, i) => ({
   id: demoId("problem", i + 1),
   xpReward: XP_BY_DIFFICULTY[p.difficulty],
   ...p,
