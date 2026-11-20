@@ -272,6 +272,10 @@ export default function AuthScreen({ initialMode, googleEnabled, demoMode }) {
             {signUp ? "Log in" : "Create an account"}
           </button>
         </p>
+        <p className="mt-2 text-center text-[11px] text-muted">
+          By continuing you agree to how we handle your data in our{" "}
+          <a href="/privacy" className="underline-offset-2 hover:text-ink hover:underline">privacy policy</a>.
+        </p>
       </motion.div>
     </div>
   );

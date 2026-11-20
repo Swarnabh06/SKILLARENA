@@ -1,4 +1,5 @@
 import { Swords } from "lucide-react";
+import Link from "next/link";
 import FloatingNav from "@/components/common/FloatingNav";
 import Marquee from "@/components/common/Marquee";
 import Bento from "@/components/landing/Bento";
@@ -55,7 +56,10 @@ export default async function HomePage() {
           <span className="flex items-center gap-1.5 font-medium text-ink">
             <Swords size={16} className="text-arena-600" aria-hidden="true" /> SkillArena
           </span>
-          <span>Learn. Code. Compete. Get Hired.</span>
+          <span className="flex items-center gap-4">
+            <span>Learn. Code. Compete. Get Hired.</span>
+            <Link href="/privacy" className="transition-colors hover:text-ink">Privacy</Link>
+          </span>
         </div>
       </footer>
     </>
