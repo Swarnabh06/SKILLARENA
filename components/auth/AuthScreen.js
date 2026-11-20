@@ -24,8 +24,16 @@ const COPY = {
 
 const ERRORS_FROM_QUERY = {
   google: "Google sign-in didn't finish. Try again.",
-  account_not_linked: "That email already has a password account. Sign in with email instead.",
+  account_not_linked:
+    "This email already has a SkillArena account with a password. Log in with your password, then connect Google in Settings. After that, Continue with Google works.",
 };
+
+/** Better Auth appends its own code after ours (?error=google&error=account_not_linked): prefer the most specific one we know. */
+function errorFromQuery(params) {
+  const codes = params.getAll("error");
+  const known = [...codes].reverse().find((c) => ERRORS_FROM_QUERY[c] && c !== "google") ?? codes.find((c) => ERRORS_FROM_QUERY[c]);
+  return known ? ERRORS_FROM_QUERY[known] : "";
+}
 
 const ROLES = [
   { value: "student", label: "Student", hint: "Practice and apply", icon: GraduationCap },
@@ -47,9 +55,9 @@ export default function AuthScreen({ initialMode, googleEnabled, demoMode }) {
 
   const [mode, setMode] = useState(initialMode);
   const [role, setRole] = useState(params.get("role") === "recruiter" ? "recruiter" : "student");
-  const [emailOpen, setEmailOpen] = useState(!googleEnabled);
+  const [emailOpen, setEmailOpen] = useState(!googleEnabled || params.getAll("error").includes("account_not_linked"));
   const [fields, setFields] = useState({ name: "", email: "", password: "" });
-  const [error, setError] = useState(ERRORS_FROM_QUERY[params.get("error")] ?? "");
+  const [error, setError] = useState(() => errorFromQuery(params));
   const [busy, setBusy] = useState(null); // "email" | "google" | null
 
   const next = safeNext(params.get("next"));

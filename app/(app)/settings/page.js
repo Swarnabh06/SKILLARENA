@@ -4,6 +4,7 @@ import AccountSettings from "@/components/settings/AccountSettings";
 import PrivacySettings from "@/components/settings/PrivacySettings";
 import { getAuth } from "@/lib/auth/auth";
 import { requireUser } from "@/lib/auth/session";
+import { isGoogleAuthConfigured } from "@/lib/utils/dataMode";
 
 export const metadata = { title: "Settings" };
 
@@ -16,7 +17,7 @@ async function Settings() {
     <div className="space-y-5">
       <h1 className="text-2xl font-medium tracking-tight">Settings</h1>
       <PrivacySettings role={user.role} isPublic={profile.isPublic ?? true} visibility={profile.visibility ?? {}} />
-      <AccountSettings email={user.email} providers={providers} />
+      <AccountSettings email={user.email} providers={providers} googleEnabled={isGoogleAuthConfigured()} />
     </div>
   );
 }
